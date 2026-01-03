@@ -139,6 +139,7 @@
             if (val === "" || val === null) return;
             const pts = parseInt(val);
             if (isNaN(pts)) return;
+            if (navigator.vibrate) navigator.vibrate(50);
             window.players[index].rounds.push(pts);
             renderAll();
             checkRoundComplete();
@@ -184,6 +185,7 @@
         function showWin(player) {
             window.isGameOver = true;
             player.matchesWon++;
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
             document.getElementById('winnerIcon').innerText = "🏆";
             document.getElementById('winnerNameDisplay').innerText = player.name + " Wins!";
             document.getElementById('finalScoreDisplay').innerText = "Total Score: " + getTotal(player);
@@ -283,3 +285,4 @@
     </script>
 </body>
 </html>
+
