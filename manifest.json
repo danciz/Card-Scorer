@@ -5,12 +5,12 @@
   "display": "standalone",
   "background_color": "#f0f2f5",
   "theme_color": "#007bff",
-  "description": "Keep track of card game scores with winner detection and history.",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/261/261020.png",
+      "src": "https://img.icons8.com/fluency/512/podium-with-audience.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
