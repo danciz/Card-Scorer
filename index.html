@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Card Scorer Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body { font-family: -apple-system, sans-serif; margin: 20px; background: #f0f2f5; color: #1c1e21; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2 { margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        input, button, select { padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid #ddd; width: 100%; box-sizing: border-box; font-size: 16px; }
+        button { background: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button.secondary { background: #6c757d; }
+        button.undo { width: auto; padding: 8px 12px; background: #e74c3c; margin-left: 10px; font-size: 14px; }
+        button.reset-btn { background: #f39c12; margin-top: 10px; }
+        button.finish-btn { background: #28a745; margin-top: 10px; }
+        
+        .mode-selector { display: flex; gap: 10px; margin: 10px 0; }
+        .mode-btn { background: #eee; color: #555; padding: 10px; flex: 1; border-radius: 8px; cursor: pointer; text-align: center; font-size: 14px; border: 2px solid transparent; }
+        .mode-btn.active { background: #007bff; color: white; border-color: #0056b3; }
+
+        .player-row { display: flex; align-items: center; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #f0f0f0; }
+        .waiting-status { font-size: 0.75em; color: #e67e22; font-weight: bold; padding-top: 4px; display: block; }
+        .leaderboard-item { display: flex; justify-content: space-between; padding: 12px; margin: 5px 0; background: #f8f9fa; border-radius: 8px; }
+        .top-player { background: #fff9c4; border: 1px solid #fbc02d; font-weight: bold; }
+        .win-count { background: #007bff; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; margin-left: 8px; }
+        
+        .history-item { font-size: 0.85em; border-left: 5px solid #007bff; padding: 10px; margin-bottom: 10px; background: #fff; border-radius: 0 8px 8px 0; }
+        .hidden { display: none !important; }
+
+        #winnerOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 1000; color: white; text-align: center;
+        }
+        .winner-card { background: white; color: #1c1e21; padding: 30px; border-radius: 20px; width: 85%; max-width: 400px; }
+    </style>
+</head>
+<body>
+
+    <div id="setup-screen" class="card">
+        <h2>Game Setup</h2>
+        <input type="text" id="game-name-input" placeholder="Game Name">
+        <label style="font-size: 14px; color: #666;">Winning Condition:</label>
+        <div class="mode-selector">
+            <button type="button" id="mode-high" class="mode-btn active" onclick="setMode('high')">Highest Wins</button>
+            <button type="button" id="mode-low" class="mode-btn" onclick="setMode('low')">Lowest Wins</button>
+        </div>
+        <input type="number" id="target-score-input" placeholder="Target Score">
+        <div id="player-inputs-container">
+            <input type="text" class="p-name-input" placeholder="Player 1 Name">
+            <input type="text" class="p-name-input" placeholder="Player 2 Name">
+        </div>
+        <button type="button" class="secondary" onclick="addPlayerField()">+ Add Player</button>
+        <button type="button" onclick="startGame()">Start Game</button>
+    </div>
+
+    <div id="game-screen" class="card hidden">
+        <h2 id="display-game-name">Scoreboard</h2>
+        <p id="display-target" style="color: #666; font-weight: bold;"></p>
+        <div id="scoreboard-inputs"></div>
+        <div style="margin-top: 25px;">
+            <h3>🏆 Leaderboard</h3>
+            <div id="leaderboard-list"></div>
+        </div>
+        <button type="button" class="reset-btn" onclick="confirmReset()">Reset Round & Log History</button>
+        <button type="button" class="finish-btn" onclick="saveAndEndGame()">Final Exit (Save Session)</button>
+    </div>
+
+    <div id="winnerOverlay">
+        <div class="winner-card">
+            <h1 id="winnerIcon" style="font-size: 60px; margin: 0;">🏆</h1>
+            <h2 id="winnerNameDisplay">Winner!</h2>
+            <p id="finalScoreDisplay" style="font-size: 1.2em; color: #666; margin-bottom: 20px;"></p>
+            <button type="button" onclick="closeWinnerModal()" class="secondary">Close</button>
+            <button type="button" class="reset-btn" onclick="triggerResetFromModal()">Next Round</button>
+        </div>
+    </div>
+
+    <div id="history-screen" class="card">
+        <h3>Game History</h3>
+        <div id="history-list">No history yet.</div>
+    </div>
+
+    <script>
+        window.players = [];
+        window.target = 0;
+        window.isGameOver = false;
+        window.gameMode = 'high';
+
+        function setMode(mode) {
+            window.gameMode = mode;
+            document.getElementById('mode-high').className = (mode === 'high' ? 'mode-btn active' : 'mode-btn');
+            document.getElementById('mode-low').className = (mode === 'low' ? 'mode-btn active' : 'mode-btn');
+        }
+
+        function addPlayerField() {
+            const container = document.getElementById('player-inputs-container');
+            const inputs = container.getElementsByClassName('p-name-input');
+            const input = document.createElement('input');
+            input.type = "text";
+            input.className = 'p-name-input';
+            input.placeholder = "Player " + (inputs.length + 1) + " Name";
+            container.appendChild(input);
+        }
+
+        function startGame() {
+            const nameInputs = document.getElementsByClassName('p-name-input');
+            const valid = [];
+            for (let i = 0; i < nameInputs.length; i++) {
+                let val = nameInputs[i].value.trim();
+                if (val !== "") {
+                    valid.push({ name: val, rounds: [], matchesWon: 0 });
+                }
+            }
+            if (valid.length === 0) {
+                alert("Please add at least one player name!");
+                return;
+            }
+            window.players = valid;
+            window.target = parseInt(document.getElementById('target-score-input').value) || 0;
+            window.isGameOver = false;
+            document.getElementById('setup-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            document.getElementById('display-game-name').innerText = document.getElementById('game-name-input').value || "Card Game";
+            document.getElementById('display-target').innerText = (window.target > 0 ? "Target: " + window.target : "No Target") + (window.gameMode === 'high' ? " (High Wins)" : " (Low Wins)");
+            renderAll();
+        }
+
+        function getTotal(player) {
+            let sum = 0;
+            for (let r of player.rounds) sum += r;
+            return sum;
+        }
+
+        function updateScore(index, val) {
+            if (val === "" || val === null) return;
+            const pts = parseInt(val);
+            if (isNaN(pts)) return;
+            window.players[index].rounds.push(pts);
+            renderAll();
+            checkRoundComplete();
+        }
+
+        function deleteLastRound(index) {
+            if (window.players[index].rounds.length > 0) {
+                window.players[index].rounds.pop();
+                renderAll();
+            }
+        }
+
+        function checkRoundComplete() {
+            if (window.target <= 0 || window.isGameOver) return;
+            let maxRounds = 0;
+            for (let p of window.players) if (p.rounds.length > maxRounds) maxRounds = p.rounds.length;
+            let everyoneFinished = true;
+            for (let p of window.players) if (p.rounds.length !== maxRounds) everyoneFinished = false;
+
+            if (everyoneFinished && maxRounds > 0) {
+                let someoneReachedTarget = false;
+                for (let p of window.players) if (getTotal(p) >= window.target) someoneReachedTarget = true;
+                if (someoneReachedTarget) evaluateWinner();
+            }
+        }
+
+        function evaluateWinner() {
+            const sorted = [...window.players].sort((a, b) => window.gameMode === 'high' ? getTotal(b) - getTotal(a) : getTotal(a) - getTotal(b));
+            const bestScore = getTotal(sorted[0]);
+            const winners = window.players.filter(p => getTotal(p) === bestScore);
+            if (winners.length > 1) showTie(winners);
+            else showWin(winners[0]);
+        }
+
+        function showTie(winners) {
+            let names = winners.map(w => w.name).join(' & ');
+            document.getElementById('winnerIcon').innerText = "🤝";
+            document.getElementById('winnerNameDisplay').innerText = "It's a Tie!";
+            document.getElementById('finalScoreDisplay').innerText = names + " are tied at " + getTotal(winners[0]) + "!";
+            document.getElementById('winnerOverlay').style.display = 'flex';
+        }
+
+        function showWin(player) {
+            window.isGameOver = true;
+            player.matchesWon++;
+            document.getElementById('winnerIcon').innerText = "🏆";
+            document.getElementById('winnerNameDisplay').innerText = player.name + " Wins!";
+            document.getElementById('finalScoreDisplay').innerText = "Total Score: " + getTotal(player);
+            document.getElementById('winnerOverlay').style.display = 'flex';
+            // Big burst on win
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+        }
+
+        function closeWinnerModal() {
+            document.getElementById('winnerOverlay').style.display = 'none';
+        }
+
+        function confirmReset() {
+            if (confirm("Log current scores and reset board?")) performReset(false);
+        }
+
+        function triggerResetFromModal() {
+            closeWinnerModal();
+            performReset(true); // Pass 'true' to trigger confetti on Next Round
+        }
+
+        function performReset(shouldCelebrate) {
+            logHistory("Round");
+            window.isGameOver = false;
+            for (let p of window.players) p.rounds = [];
+            renderAll();
+            
+            // If we are starting a new round after a winner, fire a celebration burst
+            if (shouldCelebrate) {
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.7 },
+                    colors: ['#2ed573', '#1e90ff', '#f39c12']
+                });
+            }
+        }
+
+        function renderAll() {
+            const container = document.getElementById('scoreboard-inputs');
+            let maxRounds = 0;
+            for (let p of window.players) if (p.rounds.length > maxRounds) maxRounds = p.rounds.length;
+
+            let html = "";
+            for (let i = 0; i < window.players.length; i++) {
+                let p = window.players[i];
+                let isWaiting = p.rounds.length < maxRounds;
+                html += `
+                <div class="player-row">
+                    <div style="width: 55%">
+                        <strong>${p.name}</strong> ${p.matchesWon > 0 ? `<span class="win-count">🏆 ${p.matchesWon}</span>` : ''}
+                        <br><small>Rounds: ${p.rounds.length > 0 ? p.rounds.join(', ') : '0'}</small>
+                        <br><strong>Total: ${getTotal(p)}</strong>
+                        ${isWaiting ? '<span class="waiting-status">Waiting...</span>' : ''}
+                    </div>
+                    <div style="display: flex; align-items: center;">
+                        <input type="number" style="width:70px; margin:0;" placeholder="+/-" 
+                               onchange="updateScore(${i}, this.value); this.value=''">
+                        <button type="button" class="undo" onclick="deleteLastRound(${i})">↺</button>
+                    </div>
+                </div>`;
+            }
+            container.innerHTML = html;
+
+            const sorted = [...window.players].sort((a, b) => window.gameMode === 'high' ? getTotal(b) - getTotal(a) : getTotal(a) - getTotal(b));
+            let lbHtml = "";
+            for (let i = 0; i < sorted.length; i++) {
+                let p = sorted[i];
+                lbHtml += `
+                <div class="leaderboard-item ${i === 0 && p.rounds.length > 0 ? 'top-player' : ''}">
+                    <span>${i + 1}. ${p.name}</span><span>${getTotal(p)} pts</span>
+                </div>`;
+            }
+            document.getElementById('leaderboard-list').innerHTML = lbHtml;
+        }
+
+        function logHistory(type) {
+            const history = JSON.parse(localStorage.getItem('gameHistory') || '[]');
+            let summary = window.players.map(p => p.name + ": " + getTotal(p)).join(' | ');
+            history.unshift({
+                type, title: document.getElementById('game-name-input').value || "Card Game",
+                date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                summary
+            });
+            if (history.length > 20) history.pop();
+            localStorage.setItem('gameHistory', JSON.stringify(history));
+            loadHistory();
+        }
+
+        function saveAndEndGame() { logHistory("Final"); location.reload(); }
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('gameHistory') || '[]');
+            let html = history.map(g => `<div class="history-item"><small>${g.type}</small> <strong>${g.title}</strong><br>${g.summary}</div>`).join('');
+            document.getElementById('history-list').innerHTML = html || "No history yet.";
+        }
+        window.onload = loadHistory;
+    </script>
+</body>
+</html>
