@@ -5,12 +5,19 @@
   "display": "standalone",
   "background_color": "#f0f2f5",
   "theme_color": "#007bff",
+  "description": "Professional scoring for family card games.",
   "icons": [
     {
-      "src": "https://img.icons8.com/fluency/512/podium-with-audience.png",
+      "src": "icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     }
   ]
 }
